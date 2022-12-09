@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::num::NonZeroU32;
 use std::process::Command;
 use std::rc::Rc;
+use std::fs;
 
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -232,6 +233,28 @@ async fn compare_builds(old_build: &str, new_build: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Update {
+    name : String,
+    alias : String,
+    build_time : String
+}
+type MetaDict = HashMap<String, Vec<Update>>;
+
+fn convert_nevra_to_meta_name(nevra : Rc<str>) -> Result<String> {
+    let split_nevra = libdnf_sys::hy_split_nevra(&nevra)?;
+    let name = split_nevra.name;
+    let release = split_nevra.release;
+    let mut meta_name = name;
+    if !release.contains("fc"){
+        meta_name.push_str(".none")
+    }
+    else {
+        meta_name.push_str(release.get(release.find(".fc").unwrap()..release.find(".fc").unwrap() + 5).unwrap());
+    }
+    Ok(meta_name)
+}
+
 /// Like `ostree container encapsulate`, but uses chunks derived from package data.
 pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
     let args = args.iter().skip(1).map(|s| s.as_str());
@@ -268,6 +291,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         srcid: Rc::clone(&state.unpackaged_id),
         // Assume that content in here changes frequently.
         change_time_offset: u32::MAX,
+        change_frequency: u32::MAX,
     });
 
     let mut lowest_change_time = None;
@@ -293,11 +317,27 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
     // SAFETY: There must be at least one package.
     let (lowest_change_name, lowest_change_time) =
         lowest_change_time.expect("Failed to find any packages");
+
+    let path_to_freq = "/home/redhat/work/dev-updates-remoting/bodhi_scraper/results/fcProc.json";
+    let freq_meta = fs::read_to_string(&path_to_freq).expect("Unable to read path_to_freq");
+    let json_freq_meta: MetaDict = serde_json::from_str(&freq_meta).expect("JSON fail");
+
     // Walk over the packages, and generate the `packagemeta` mapping, which is basically a subset of
     // package metadata abstracted for ostree.  Note that right now, the package metadata includes
     // both a "unique identifer" and a "human readable name", but for rpm-ostree we're just making
     // those the same thing.
     for (nevra, pkgmeta) in package_meta.iter() {
+        let name_meta = convert_nevra_to_meta_name(Rc::clone(nevra))?;
+        let src = pkgmeta.src_pkg().to_str().unwrap();
+        let src_meta = convert_nevra_to_meta_name(Rc::from(src))?;
+        let mut freq = 0;
+        if json_freq_meta.contains_key(&name_meta) {
+            freq = json_freq_meta.get(&name_meta).unwrap().len() as u32;
+        }
+        else if json_freq_meta.contains_key(&src_meta){
+            freq = json_freq_meta.get(&src_meta).unwrap().len() as u32;
+        }
+
         let buildtime = pkgmeta.buildtime();
         let change_time_offset_secs: u32 = buildtime
             .checked_sub(lowest_change_time)
@@ -307,12 +347,15 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         // Convert to hours, because there's no strong use for caring about the relative difference of builds in terms
         // of minutes or seconds.
         let change_time_offset = change_time_offset_secs / (60 * 60);
-        state.packagemeta.insert(ObjectSourceMeta {
+        let obj_src_meta = ObjectSourceMeta {
             identifier: Rc::clone(nevra),
             name: Rc::clone(nevra),
             srcid: Rc::from(pkgmeta.src_pkg().to_str().unwrap()),
             change_time_offset,
-        });
+            change_frequency: freq,
+        };
+        //println!("{:#?}", obj_src_meta);
+        state.packagemeta.insert(obj_src_meta);
     }
 
     let kernel_dir = ostree_ext::bootabletree::find_kernel_dir(&root, gio::Cancellable::NONE)?;
@@ -339,6 +382,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
                 name: Rc::clone(&name),
                 srcid: Rc::clone(&name),
                 change_time_offset: u32::MAX,
+                change_frequency: u32::MAX,
             });
             state.skip.insert(path);
         }
