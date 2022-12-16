@@ -292,6 +292,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         // Assume that content in here changes frequently.
         change_time_offset: u32::MAX,
         change_frequency: u32::MAX,
+        missing_bodhi: true,
     });
 
     let mut lowest_change_time = None;
@@ -331,7 +332,9 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         let src = pkgmeta.src_pkg().to_str().unwrap();
         let src_meta = convert_nevra_to_meta_name(Rc::from(src))?;
         let mut freq = 0;
+        let mut missing_bodhi = true;
         if json_freq_meta.contains_key(&name_meta) {
+            missing_bodhi = false;
             freq = json_freq_meta.get(&name_meta).unwrap().len() as u32;
         }
         else if json_freq_meta.contains_key(&src_meta){
@@ -353,6 +356,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
             srcid: Rc::from(pkgmeta.src_pkg().to_str().unwrap()),
             change_time_offset,
             change_frequency: freq,
+            missing_bodhi: missing_bodhi,
         };
         //println!("{:#?}", obj_src_meta);
         state.packagemeta.insert(obj_src_meta);
@@ -383,6 +387,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
                 srcid: Rc::clone(&name),
                 change_time_offset: u32::MAX,
                 change_frequency: u32::MAX,
+                missing_bodhi: true,
             });
             state.skip.insert(path);
         }
