@@ -20,4 +20,6 @@ start=`date +%s.%N`
 /home/redhat/work/dev-updates-remoting/rpm-ostree/rpm-ostree compose container-encapsulate --repo=repo testref oci:${tmpdir}/test.oci
 end=`date +%s.%N`
 runtime=$( echo "$end - $start" | bc -l )
->>>>>>> 8a85f660 (Adding --compare-with-build to cli)
+skopeo inspect oci:${tmpdir}/test.oci | jq '.LayersData | .[0].Annotations.Content' > annotation_ostree.txt
+grep -qFe ostree_commit annotation_ostree.txt
+echo ok
