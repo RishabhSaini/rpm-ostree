@@ -451,6 +451,31 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         })
         .collect::<Result<_>>()?;
 
+    let handle = tokio::runtime::Handle::current();
+    let package_structure = match &opt.prior_build{
+        Some(prior_build) => {
+                let prev_package_structure = handle.block_on(async {
+                    let proxy = containers_image_proxy::ImageProxy::new().await?;
+                    let mut annotation_build : Vec<Vec<String>> = Vec::new();
+                    let oi = proxy.open_image(prior_build).await?;
+                    let (digest, manifest) = proxy.fetch_manifest(&oi).await?;
+                    let layers = manifest.layers();
+                    for descriptor in layers {
+                        let annotation_layer = descriptor.annotations().as_ref().expect("Layer does not consist annotation");
+                        let pkgs: Vec<&str> = annotation_layer["Content"].split(',').collect();
+                        let mut pkgs_string: Vec<String> = Vec::new();
+                        for pkg in pkgs {
+                            pkgs_string.push(pkg.to_string());
+                        }
+                        annotation_build.push(pkgs_string);
+                    }
+                    Ok::<_, anyhow::Error>(annotation_build)
+                })?;
+                Some(prev_package_structure)
+            },
+        None => None,
+    };
+
     let mut copy_meta_keys = opt.copy_meta_keys;
     // Default to copying the input hash to support cheap change detection
     copy_meta_keys.push("rpmostree.inputhash".to_string());
@@ -470,6 +495,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         copy_meta_opt_keys,
         max_layers: opt.max_layers,
         format,
+        prior_build_metadata: package_structure, 
         ..Default::default()
     };
     let handle = tokio::runtime::Handle::current();
