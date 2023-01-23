@@ -284,7 +284,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         skip: Default::default(),
         rpmsize: Default::default(),
     };
-    // Insert metadata for unpakaged content.
+    // Insert metadata for unpackaged content.
     state.packagemeta.insert(ObjectSourceMeta {
         identifier: Rc::clone(&state.unpackaged_id),
         name: Rc::clone(&state.unpackaged_id),
@@ -352,7 +352,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         let change_time_offset = change_time_offset_secs / (60 * 60);
         let obj_src_meta = ObjectSourceMeta {
             identifier: Rc::clone(nevra),
-            name: Rc::clone(nevra),
+            name: Rc::from(libdnf_sys::hy_split_nevra(&Rc::clone(nevra))?.name),
             srcid: Rc::from(pkgmeta.src_pkg().to_str().unwrap()),
             change_time_offset,
             change_frequency: freq,
@@ -378,13 +378,14 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
                 .map_err(anyhow::Error::msg)?;
             let initramfs = initramfs.downcast_ref::<ostree::RepoFile>().unwrap();
             let checksum = initramfs.checksum().unwrap();
-            let name = format!("initramfs (kernel {})", kernel_ver).into_boxed_str();
-            let name = Rc::from(name);
-            state.content.insert(checksum.to_string(), Rc::clone(&name));
+            let name = format!("initramfs");
+            let identifier = format!("{} (kernel {})", name, kernel_ver).into_boxed_str();
+            let identifier = Rc::from(identifier);
+            state.content.insert(checksum.to_string(), Rc::clone(&identifier));
             state.packagemeta.insert(ObjectSourceMeta {
-                identifier: Rc::clone(&name),
-                name: Rc::clone(&name),
-                srcid: Rc::clone(&name),
+                identifier: Rc::clone(&identifier),
+                name: Rc::from(name),
+                srcid: Rc::clone(&identifier),
                 change_time_offset: u32::MAX,
                 change_frequency: u32::MAX,
                 missing_bodhi: true,
@@ -460,22 +461,22 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
                     let oi = proxy.open_image(prior_build).await?;
                     let (digest, manifest) = proxy.fetch_manifest(&oi).await?;
                     let layers = manifest.layers();
-                    for descriptor in layers {
-                        let annotation_layer = descriptor.annotations().as_ref().expect("Layer does not consist annotation");
+                    for layer in layers {
+                        let annotation_layer = layer.annotations().as_ref().expect("Layer does not consist annotation");
                         let pkgs: Vec<&str> = annotation_layer["Content"].split(',').collect();
                         let mut pkgs_string: Vec<String> = Vec::new();
-                        for pkg in pkgs {
+                        for pkg in &pkgs {
                             pkgs_string.push(pkg.to_string());
                         }
                         annotation_build.push(pkgs_string);
                     }
                     Ok::<_, anyhow::Error>(annotation_build)
                 })?;
-                Some(prev_package_structure)
+                Some(prev_package_structure) 
             },
         None => None,
     };
-
+    
     let mut copy_meta_keys = opt.copy_meta_keys;
     // Default to copying the input hash to support cheap change detection
     copy_meta_keys.push("rpmostree.inputhash".to_string());
