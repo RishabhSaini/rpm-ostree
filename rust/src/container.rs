@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs;
 use std::num::NonZeroU32;
 use std::process::Command;
 use std::rc::Rc;
-use std::fs;
 
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -235,22 +235,25 @@ async fn compare_builds(old_build: &str, new_build: &str) -> Result<()> {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Update {
-    name : String,
-    alias : String,
-    build_time : String
+    name: String,
+    alias: String,
+    build_time: String,
 }
 type MetaDict = HashMap<String, Vec<Update>>;
 
-fn convert_nevra_to_meta_name(nevra : Rc<str>) -> Result<String> {
+fn convert_nevra_to_meta_name(nevra: Rc<str>) -> Result<String> {
     let split_nevra = libdnf_sys::hy_split_nevra(&nevra)?;
     let name = split_nevra.name;
     let release = split_nevra.release;
     let mut meta_name = name;
-    if !release.contains("fc"){
+    if !release.contains("fc") {
         meta_name.push_str(".none")
-    }
-    else {
-        meta_name.push_str(release.get(release.find(".fc").unwrap()..release.find(".fc").unwrap() + 5).unwrap());
+    } else {
+        meta_name.push_str(
+            release
+                .get(release.find(".fc").unwrap()..release.find(".fc").unwrap() + 5)
+                .unwrap(),
+        );
     }
     Ok(meta_name)
 }
@@ -336,8 +339,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         if json_freq_meta.contains_key(&name_meta) {
             missing_bodhi = false;
             freq = json_freq_meta.get(&name_meta).unwrap().len() as u32;
-        }
-        else if json_freq_meta.contains_key(&src_meta){
+        } else if json_freq_meta.contains_key(&src_meta) {
             freq = json_freq_meta.get(&src_meta).unwrap().len() as u32;
         }
 
@@ -381,7 +383,9 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
             let name = format!("initramfs");
             let identifier = format!("{} (kernel {})", name, kernel_ver).into_boxed_str();
             let identifier = Rc::from(identifier);
-            state.content.insert(checksum.to_string(), Rc::clone(&identifier));
+            state
+                .content
+                .insert(checksum.to_string(), Rc::clone(&identifier));
             state.packagemeta.insert(ObjectSourceMeta {
                 identifier: Rc::clone(&identifier),
                 name: Rc::from(name),
@@ -453,30 +457,33 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         .collect::<Result<_>>()?;
 
     let handle = tokio::runtime::Handle::current();
-    let package_structure = match &opt.prior_build{
+    let package_structure = match &opt.prior_build {
         Some(prior_build) => {
-                let prev_package_structure = handle.block_on(async {
-                    let proxy = containers_image_proxy::ImageProxy::new().await?;
-                    let mut annotation_build : Vec<Vec<String>> = Vec::new();
-                    let oi = proxy.open_image(prior_build).await?;
-                    let (digest, manifest) = proxy.fetch_manifest(&oi).await?;
-                    let layers = manifest.layers();
-                    for layer in layers {
-                        let annotation_layer = layer.annotations().as_ref().expect("Layer does not consist annotation");
-                        let pkgs: Vec<&str> = annotation_layer["Content"].split(',').collect();
-                        let mut pkgs_string: Vec<String> = Vec::new();
-                        for pkg in &pkgs {
-                            pkgs_string.push(pkg.to_string());
-                        }
-                        annotation_build.push(pkgs_string);
+            let prev_package_structure = handle.block_on(async {
+                let proxy = containers_image_proxy::ImageProxy::new().await?;
+                let mut annotation_build: Vec<Vec<String>> = Vec::new();
+                let oi = proxy.open_image(prior_build).await?;
+                let (_, manifest) = proxy.fetch_manifest(&oi).await?;
+                let layers = manifest.layers();
+                for layer in layers {
+                    let annotation_layer = layer
+                        .annotations()
+                        .as_ref()
+                        .expect("Layer does not consist annotation");
+                    let pkgs: Vec<&str> = annotation_layer["Content"].split(',').collect();
+                    let mut pkgs_string: Vec<String> = Vec::new();
+                    for pkg in &pkgs {
+                        pkgs_string.push(pkg.to_string());
                     }
-                    Ok::<_, anyhow::Error>(annotation_build)
-                })?;
-                Some(prev_package_structure) 
-            },
+                    annotation_build.push(pkgs_string);
+                }
+                Ok::<_, anyhow::Error>(annotation_build)
+            })?;
+            Some(prev_package_structure)
+        }
         None => None,
     };
-    
+
     let mut copy_meta_keys = opt.copy_meta_keys;
     // Default to copying the input hash to support cheap change detection
     copy_meta_keys.push("rpmostree.inputhash".to_string());
@@ -496,7 +503,7 @@ pub fn container_encapsulate(args: Vec<String>) -> CxxResult<()> {
         copy_meta_opt_keys,
         max_layers: opt.max_layers,
         format,
-        prior_build_metadata: package_structure, 
+        prior_build_metadata: package_structure,
         ..Default::default()
     };
     let handle = tokio::runtime::Handle::current();

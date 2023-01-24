@@ -23,3 +23,6 @@ start=`date +%s.%N`
 /home/redhat/work/dev-updates-remoting/rpm-ostree/rpm-ostree compose container-encapsulate --compare-with-build=oci:/tmp/coreTest-${compare_ver}/test.oci --prior-build=oci:/tmp/coreTest-${packaging_ver}/test.oci --repo=repo testref oci:${tmpdir}/test.oci
 end=`date +%s.%N`
 runtime=$( echo "$end - $start" | bc -l )
+skopeo inspect oci:${tmpdir}/test.oci | jq '.LayersData | .[0].Annotations.Content' > annotation_ostree.txt
+grep -qFe ostree_commit annotation_ostree.txt
+echo ok
