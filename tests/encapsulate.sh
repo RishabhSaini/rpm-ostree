@@ -3,7 +3,6 @@ set -xeuo pipefail
 # Pull the latest FCOS build, unpack its container image, and verify
 # that we can re-encapsulate it as chunked.
 
-<<<<<<< HEAD
 ver=37.20230126.20.0
 container=quay.io/fedora/fedora-coreos:${ver}
 
@@ -24,8 +23,3 @@ runtime=$( echo "$end - $start" | bc -l )
 skopeo inspect oci:${tmpdir}/test.oci | jq '.LayersData | .[0].Annotations.Content' > annotation_ostree.txt
 grep -qFe ostree_commit annotation_ostree.txt
 echo ok
-
-#-p oci:/tmp/coreTest-37.20230110.20.1/test.oci \
-#    -p oci:/tmp/coreTest-37.20230110.20.0/test.oci \
-#    -p oci:/tmp/coreTest-37.20230109.20.0/test.oci \
-
