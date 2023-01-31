@@ -25,4 +25,6 @@ end=`date +%s.%N`
 runtime=$( echo "$end - $start" | bc -l )
 skopeo inspect oci:${tmpdir}/test.oci | jq '.LayersData | .[0].Annotations.Content' > annotation_ostree.txt
 grep -qFe ostree_commit annotation_ostree.txt
+skopeo inspect --config oci:${tmpdir}/test.oci | jq '.rootfs.diff_ids' > layersDiffids.txt
+diff ${tmpdir}/layersDiffids.txt ${p_tmpdir}/layersDiffids.txt 
 echo ok
