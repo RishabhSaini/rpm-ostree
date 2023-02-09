@@ -82,6 +82,10 @@ struct ContainerEncapsulateOpts {
     /// Compare OCI layers of current build with another(imgref)
     #[clap(name = "compare-with-build", long, short)]
     compare_with_build: Option<String>,
+
+    /// Prevent a change in packing structure by taking a previous build(imgref)
+    #[clap(name="prior-build", long, short)]
+    prior_build: Option<String>,
 }
 
 #[derive(Debug)]
