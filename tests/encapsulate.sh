@@ -3,7 +3,7 @@ set -xeuo pipefail
 # Pull the latest FCOS build, unpack its container image, and verify
 # that we can re-encapsulate it as chunked.
 
-ver=37.20230126.20.0
+ver=37.20221111.20.0
 container=quay.io/fedora/fedora-coreos:${ver}
 
 tmpdir=/tmp/coreTest-${ver}
